@@ -40,6 +40,9 @@ void update()
             if (app.keyboard.pressed[KEY_SPACE]) {
                 sim_add_obj(230.0f, 120.0f);
             }
+            if (app.keyboard.pressed[KEY_C]) {
+                sim_create_connection((Vec2){100, 100}, (Vec2){130, 130});
+            }
             if (app.keyboard.pressed[KEY_R]) {
                 state = START_SCREEN;
             }

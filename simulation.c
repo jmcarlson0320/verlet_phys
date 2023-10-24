@@ -3,12 +3,26 @@
 #include "vec.h"
 #include <tiny-fw.h>
 
+#define bool int
+#define true 1
+#define false 0
+
 #define MAX_OBJECTS 100
+#define MAX_CONNECTIONS 5
+
+typedef struct {
+    int obj1;
+    int obj2;
+    float length;
+} Connection;
 
 static const Vec2 gravity = {0.0f, 100.0f};
 
 static Verlet_obj objects[MAX_OBJECTS];
 static int num_obj = 0;
+
+static Connection connections[MAX_CONNECTIONS];
+static int num_connections = 0;
 
 static Vec2 constraint_center = {128.0f, 128.0f};
 static float constraint_radius = 120.0f;
@@ -37,6 +51,24 @@ static void apply_constraint()
             n = mult(n, constraint_radius - 10.0f);
             objects[i].current_position = sub(constraint_center, n);
         }
+    }
+}
+
+static void solve_connections()
+{
+    for (int i = 0; i < num_connections; i++) {
+        int index1 = connections[i].obj1;
+        int index2 = connections[i].obj2;
+        Vec2 pos1 = objects[index1].current_position;
+        Vec2 pos2 = objects[index2].current_position;
+        Vec2 axis = sub(pos2, pos1);
+        float dist = length(axis);
+        float difference = connections[i].length - dist;
+        float correction_amt = difference / 2;
+        axis = div(axis, dist);
+        axis = mult(axis, correction_amt);
+        objects[index1].current_position = sub(objects[index1].current_position, axis);
+        objects[index2].current_position = add(objects[index2].current_position, axis);
     }
 }
 
@@ -76,37 +108,65 @@ static void draw_constraint()
     draw_fill_circle(constraint_center.x, constraint_center.y, constraint_radius, 0x000000);
 }
 
+static void draw_connections()
+{
+    for (int i = 0; i < num_connections; i++) {
+        int index1 = connections[i].obj1;
+        int index2 = connections[i].obj2;
+        Vec2 pos1 = objects[index1].current_position;
+        Vec2 pos2 = objects[index2].current_position;
+        draw_line(pos1.x, pos1.y, pos2.x, pos2.y, 0xff0000);
+    }
+}
+
 void sim_init()
 {
     num_obj = 0;
-    sim_add_obj(230.0f, 120.0f);
+    num_connections = 0;
 }
 
 void sim_update(float dt)
 {
-    float sub_dt = dt / SUB_STEPS;
+    apply_gravity();
     for (int i = 0; i < SUB_STEPS; i++) {
-        apply_gravity();
         apply_constraint();
         solve_collisions();
-        update_positions(sub_dt);
+        solve_connections();
     }
+    update_positions(dt);
 }
 
 void sim_render()
 {
     draw_constraint();
+    draw_connections();
     draw_objects();
 }
 
 void sim_add_obj(float x, float y)
 {
-    if (num_obj < MAX_OBJECTS) {
-        objects[num_obj] = (Verlet_obj) {
-            .current_position = {x, y},
-            .previous_position = {x, y},
-            .acceleration = {0.0f, 0.0f}
-        };
-        num_obj++;
+    if (num_obj >= MAX_OBJECTS) {
+        return;
     }
+    objects[num_obj] = (Verlet_obj) {
+        .current_position = {x, y},
+        .previous_position = {x, y},
+        .acceleration = {0.0f, 0.0f}
+    };
+    num_obj++;
+}
+
+void sim_create_connection(Vec2 pos1, Vec2 pos2)
+{
+    if ((num_connections >= MAX_CONNECTIONS) || (MAX_OBJECTS - num_obj < 2)) {
+        return;
+    }
+    int index_obj1 = num_obj;
+    int index_obj2 = num_obj + 1;
+    sim_add_obj(pos1.x, pos1.y);
+    sim_add_obj(pos2.x, pos2.y);
+    connections[num_connections].obj1 = index_obj1;
+    connections[num_connections].obj2 = index_obj2;
+    connections[num_connections].length = length(sub(pos2, pos1));
+    num_connections++;
 }
